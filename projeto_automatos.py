@@ -56,7 +56,7 @@ while sair != 2:
         print("Endereço de email fora das regras\n")
 
     senhas = (str(input("Digite sua senha: ")))
-    if senhas.__len__() >= 6 and not ' ' in senhas:
+    if senhas.__len__() >= 6 and senhas.__len__() <= 20 and not ' ' in senhas:
         usuario["senha"].append(senhas)
         print("Senha liberada\n")
     else:
