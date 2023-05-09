@@ -1,0 +1,1264 @@
+<html>
+<head>
+<title>Simulador de CPU</title>
+
+<script src="scripts.js"></script>
+
+<script>
+
+var imageNames = new Array ("bendBlue.gif","bendRed.gif",
+                           "bendClosedBlue.gif", "bendOpenBlue.gif", 
+			   "bendClosedRed.gif",
+			   "downArrowClosedBlue.gif", "downArrowOpenBlue.gif",
+			   "downArrowClosedRed.gif",
+			   "saluDial0.gif", "saluDial1.gif", 
+			   "saluDial2.gif", "saluDial3.gif",
+			   "shortDownArrowBlue.gif","shortDownArrowRed.gif",
+			   "sregDial0.gif", "sregDial1.gif",
+			   "sregDial2.gif", "sregDial3.gif",
+			   "upArrowClosedBlue.gif", "upArrowOpenBlue.gif",
+			   "upArrowClosedRed.gif",
+			   "upArrowBlue.gif", "upArrowRed.gif",
+			   "../microprog/loadArrowGreen.gif",
+			   "../control/downArrowBlue.gif", 
+			   "../control/downArrowRed.gif",
+			   "../control/leftArrowBlue.gif",
+			   "../control/leftArrowRed.gif",
+			   "../control/upArrowBlue.gif",
+			   "../control/upArrowRed.gif");
+
+var imageObj = new Array(imageNames.length);
+for (var i=0; i<imageNames.length; i++) {
+    imageObj[i] = new Image();
+    imageObj[i].src = imageNames[i]; 
+}  
+
+setGlobals();
+
+function setGlobals()
+{
+  WITH_MEMORY = (top.memory != null);
+  WITH_MICROPROG = (top.microprog != null);
+  WITH_CONTROL = (top.control != null)
+
+  RESUME_HERE = null;
+
+  PREVIOUS_NUMBERBASE = -10;
+
+  CHANGE_ENABLED = true;
+  HALT_CYCLE = false;
+  MICRO_INST = 0;
+
+  NUM_BLINKS = 13;
+  BLINK_TIME = 200;
+
+  ALU_ZERO = true;
+  ALU_NEGATIVE = false;
+  ALU_UNSIGNED_OVERFLOW = false;
+  ALU_SIGNED_OVERFLOW = false;
+ 
+  registerBaseTwoValues = new Array(11);
+  RO_INDEX = 0;  ABUS_INDEX = 4;  ALUA_INDEX = 8;
+  R1_INDEX = 1;  BBUS_INDEX = 5;  ALUB_INDEX = 9;
+  R2_INDEX = 2;  CBUS_INDEX = 6;  ALUC_INDEX = 10;
+  R3_INDEX = 3;  MMBUS_INDEX = 7;
+}
+
+function updateAllRegisters(newBase)
+{
+  document.datapath.R0.value = getNumber(registerBaseTwoValues[RO_INDEX],2,newBase,16);
+  document.datapath.R1.value = getNumber(registerBaseTwoValues[R1_INDEX],2,newBase,16);
+  document.datapath.R2.value = getNumber(registerBaseTwoValues[R2_INDEX],2,newBase,16);
+  document.datapath.R3.value = getNumber(registerBaseTwoValues[R3_INDEX],2,newBase,16);
+  document.datapath.ABus.value = getNumber(registerBaseTwoValues[ABUS_INDEX],2,newBase,16);
+  document.datapath.BBus.value = getNumber(registerBaseTwoValues[BBUS_INDEX],2,newBase,16);
+  document.datapath.CBus.value = getNumber(registerBaseTwoValues[CBUS_INDEX],2,newBase,16);
+  document.datapath.ALUA.value = getNumber(registerBaseTwoValues[ALUA_INDEX],2,newBase,16);
+  document.datapath.ALUB.value = getNumber(registerBaseTwoValues[ALUB_INDEX],2,newBase,16);  
+  document.datapath.ALUC.value = getNumber(registerBaseTwoValues[ALUC_INDEX],2,newBase,16);
+
+  if (WITH_MEMORY)
+    document.datapath.MMBus.value = getNumber(registerBaseTwoValues[MMBUS_INDEX],2,newBase,16);
+
+  top.DATAPATH_LOADED = true;
+}
+
+function initPage()
+{
+  var i;
+
+  for (i=0; i < 11; i++)
+    registerBaseTwoValues[i] = "0000000000000000";
+
+  document.datapath.numberBase[0].selected = true;
+  document.datapath.zero.checked = true;
+  document.datapath.negative.checked = false;
+  document.datapath.uoverflow.checked = false;
+  document.datapath.soverflow.checked = false;
+  
+  updateAllRegisters(getNumberBase());
+}
+
+function getKnobSetting(knobName)
+{
+  var kn, knobPos;
+
+  kn = document[knobName].src;
+  knobPos = parseInt(kn.substring(kn.length-5,kn.length-3));
+  return knobPos;
+}
+
+function setKnob(knobPrefix, knobName, knobPos)
+{
+  document[knobName].src = knobPrefix + "Dial" + knobPos + ".gif";
+}
+
+function turnKnob(knobPrefix, knobName, knobInc)
+{
+  var knobPos;
+
+  if (CHANGE_ENABLED)
+  {
+    knobPos = getKnobSetting(knobName) + knobInc;
+
+    if (knobPos > 3)
+      knobPos = 0;
+
+    setKnob(knobPrefix, knobName, knobPos);
+  }
+}
+
+function toggleSwitch(theSwitch)
+{
+  var newSrc, OC, newPos;
+ 
+  if (CHANGE_ENABLED)
+  {
+    oldSrc = document[theSwitch].src;
+
+    newPos = "Closed";
+    OC = document[theSwitch].src.indexOf("Open");
+    if (OC == -1)
+    {
+      OC = document[theSwitch].src.indexOf("Closed");
+      newPos = "Open";
+    }
+
+    setSwitch(theSwitch,newPos);
+  }
+}
+
+function setSwitch(theSwitch,theState)
+{
+  var newSrc, OC, BL;;
+  
+  OC = document[theSwitch].src.indexOf("Closed");
+  if (OC == -1)
+    OC = document[theSwitch].src.indexOf("Open");
+
+  BL = document[theSwitch].src.indexOf("Blue");
+
+  newSrc = document[theSwitch].src.substring(0,OC) + 
+           theState + 
+           document[theSwitch].src.substring(BL,document[theSwitch].src.length);
+
+  document[theSwitch].src = newSrc;
+}
+
+function blinkIt(blinks, evenTimes, oddTimes, whenDone, blinkTime)
+{
+  if (blinks % 2 == 0)
+  {
+    eval(evenTimes);
+  }
+  else
+  {
+    eval(oddTimes);
+  }
+
+  if (blinks != 0 && (!HALT_CYCLE || blinks % 2 != 0))
+    timeoutID = setTimeout("blinkIt(" + (blinks - 1) + 
+                           ",'" + evenTimes + "','" + oddTimes + 
+                           "','" + whenDone + "'," + blinkTime +
+                           ");", blinkTime);
+  else
+    eval(whenDone);
+}
+
+function startInstructionCycle()
+{
+  RESUME_HERE = "startInstructionCycle();";
+
+  if (!HALT_CYCLE)
+    blinkIt(NUM_BLINKS,
+            'top.control.setPC()',
+            'top.control.clearPC()',
+            'instructionCycle2()',
+            BLINK_TIME);  
+}
+
+function instructionCycle2()
+{
+  RESUME_HERE = "instructionCycle2();";
+
+  if (!HALT_CYCLE)
+    blinkIt(NUM_BLINKS,
+            'top.memory.setSelectedAddress(top.control.getPC());',
+            'top.memory.clearSelectedAddress(top.control.getPC());',
+            'instructionCycle3();',
+            BLINK_TIME);
+}
+
+function instructionCycle3()
+{
+  RESUME_HERE = "instructionCycle3();";
+
+  top.control.IR_VALUE = top.memory.getValue(top.control.getPC());
+  top.control.setIR();
+
+  if (!HALT_CYCLE)
+    blinkIt(NUM_BLINKS,
+            'top.control.setIR();',
+            'top.control.clearIR();',
+            'instructionCycle4()', 
+            BLINK_TIME);
+}
+
+function instructionCycle4()
+{
+  RESUME_HERE = "instructionCycle4();";
+
+  if (!HALT_CYCLE) 
+    blinkIt(NUM_BLINKS,
+            'top.control.setIRUpPCDownArrowBlue();',
+            'top.control.setIRUpPCDownArrowRed();',
+            'instructionCycle5()',
+            BLINK_TIME);
+}
+
+function instructionCycle5()
+{
+  RESUME_HERE = "instructionCycle5();";
+
+  if (!HALT_CYCLE)
+    blinkIt(NUM_BLINKS,
+            'top.control.setTransArrowsBlue();',
+            'top.control.setTransArrowsRed();',
+            'instructionCycle6();',
+            BLINK_TIME);
+}
+
+function instructionCycle6()
+{
+  var theInst;
+
+  RESUME_HERE = "instructionCycle6();";
+
+  top.control.setNewPC();
+  top.control.setNewMicroIR();
+
+  if (!HALT_CYCLE)
+  {
+    theInst = getNumber(top.control.IR_VALUE,2,-1,16);
+    
+    if(theInst.charAt(0) == 'B')
+      startInstructionCycle();
+    else if (theInst != "Parar")
+    {
+      MICRO_INST = 0;
+      setControls();
+    }
+    else
+     stopCycle();
+  }
+}
+
+function setControls()
+{
+  RESUME_HERE = "setControls();";
+
+  if ((top.microprog && top.microprog.document.microprog["AAddr" + MICRO_INST].value.toLowerCase() != "xx") ||
+      (WITH_CONTROL))
+  {
+    blinkIt(NUM_BLINKS,
+            'setMicroInst()',
+            'clearMicroInst()',
+            'setControlsMid()',
+            BLINK_TIME);
+  }
+  else
+    stopCycle();
+}
+
+function setMicroInst()
+{
+  if (WITH_CONTROL)
+  {
+    top.control.setMicroInst(0);
+    top.control.setPC();
+  }
+  else
+    top.microprog.setMicroInst(MICRO_INST);
+}
+
+function clearMicroInst()
+{
+  if (WITH_CONTROL)
+  {
+    top.control.clearMicroInst(0);
+    top.control.clearPC();
+  }
+  else
+    top.microprog.clearMicroInst(MICRO_INST);
+}
+
+function setControlsMid()
+{
+
+  RESUME_HERE = "setControlsMid();";
+
+  if (WITH_CONTROL)
+    top.control.setKnobsAndSwitches(0);
+  else
+    top.microprog.setKnobsAndSwitches(MICRO_INST);
+
+  loadABBusReg();
+}
+
+function loadABBusReg()
+{
+
+  RESUME_HERE = "loadABBusReg();";
+
+  if (!HALT_CYCLE)
+    blinkIt(NUM_BLINKS,
+            'setRegisters()',
+	    'clearRegisters()',
+            'loadABBusRegMid()',
+            BLINK_TIME);
+}
+
+function setRegisters()
+{ 
+  var aRegIndex, bRegIndex;
+
+  aRegIndex = getKnobSetting("AAddr");
+  document.datapath["R" + aRegIndex].value = 
+    getNumber(registerBaseTwoValues[aRegIndex],2,getNumberBase(),16);
+
+  bRegIndex = getKnobSetting("BAddr");
+  document.datapath["R" + bRegIndex].value = 
+    getNumber(registerBaseTwoValues[bRegIndex],2,getNumberBase(),16);
+
+  if(WITH_MEMORY)
+    top.memory.setSelectedAddress();
+}
+
+function clearRegisters()
+{
+  var aRegIndex, bRegIndex;
+
+  aRegIndex = getKnobSetting("AAddr");
+  document.datapath["R" + aRegIndex].value = "";
+
+  bRegIndex = getKnobSetting("BAddr");
+  document.datapath["R" + bRegIndex].value = "";
+  
+  if(WITH_MEMORY)
+    top.memory.clearSelectedAddress();
+}
+
+function loadABBusRegMid()
+{
+  RESUME_HERE = "loadABBusRegMid();";
+
+  if (!HALT_CYCLE)
+    blinkIt(NUM_BLINKS,
+            'setArrow1Blue()',
+	    'setArrow1Red()',
+            'loadABBusRegTail()',
+            BLINK_TIME);
+}
+
+function setArrow1Red()
+{
+  document.AArrow1.src = "shortDownArrowRed.gif";
+  document.BArrow1.src = "shortDownArrowRed.gif";
+
+  if(WITH_MEMORY)
+    top.memory.clearSelectedAddress();
+}
+
+function setArrow1Blue()
+{
+  document.AArrow1.src = "shortDownArrowBlue.gif";
+  document.BArrow1.src = "shortDownArrowBlue.gif";
+
+  if(WITH_MEMORY)
+    top.memory.setSelectedAddress();
+}
+
+function loadABBusRegTail()
+{
+  var aRegIndex, bRegIndex;
+
+  RESUME_HERE = "loadABBusRegTail();";
+
+  aRegIndex = getKnobSetting("AAddr");
+  registerBaseTwoValues[ABUS_INDEX] = registerBaseTwoValues[aRegIndex];
+
+  bRegIndex = getKnobSetting("BAddr");
+  registerBaseTwoValues[BBUS_INDEX] = registerBaseTwoValues[bRegIndex];
+
+  if (!HALT_CYCLE)
+    blinkIt(NUM_BLINKS,
+            'setABBusReg()',
+	    'clearABBusReg()',
+            'loadABBusRegEnd()',
+            BLINK_TIME);
+}
+
+function setABBusReg()
+{
+  document.datapath.ABus.value = getNumber(registerBaseTwoValues[ABUS_INDEX],
+                                           2,getNumberBase(),16);
+
+  document.datapath.BBus.value = getNumber(registerBaseTwoValues[BBUS_INDEX],
+                                           2,getNumberBase(),16);
+  
+  if(WITH_MEMORY)
+    top.memory.setSelectedAddress();
+}
+
+function clearABBusReg()
+{
+  document.datapath.ABus.value = ""
+  document.datapath.BBus.value = ""
+
+  if(WITH_MEMORY)
+    top.memory.clearSelectedAddress();
+}
+
+function loadABBusRegEnd()
+{
+  loadALUReg();
+} 
+
+function loadALUReg()
+{
+  RESUME_HERE = "loadALUReg();";
+
+  if (!HALT_CYCLE)
+    blinkIt(NUM_BLINKS,
+            'setArrow2Blue()',
+            'setArrow2Red()',
+            'loadALURegTail()',
+            BLINK_TIME);
+}
+
+function setArrow2Red()
+{
+  document.AArrow2.src = "shortDownArrowRed.gif";
+  document.BArrow2.src = "shortDownArrowRed.gif";
+
+  if(WITH_MEMORY)
+    top.memory.clearSelectedAddress()
+}
+
+function setArrow2Blue()
+{
+  document.AArrow2.src = "shortDownArrowBlue.gif";
+  document.BArrow2.src = "shortDownArrowBlue.gif";
+
+  if(WITH_MEMORY)
+    top.memory.setSelectedAddress();
+}
+
+function loadALURegTail()
+{
+
+  RESUME_HERE = "loadALURegTail();";
+
+  registerBaseTwoValues[ALUA_INDEX] = registerBaseTwoValues[ABUS_INDEX];
+  registerBaseTwoValues[ALUB_INDEX] = registerBaseTwoValues[BBUS_INDEX];
+
+  if (!HALT_CYCLE)
+    blinkIt(NUM_BLINKS,
+            'setALUReg()',
+            'clearALUReg()',
+            'doALUOp()',
+            BLINK_TIME);
+}
+
+function setALUReg()
+{
+  document.datapath.ALUA.value = getNumber(registerBaseTwoValues[ALUA_INDEX],
+                                           2,getNumberBase(),16);
+  document.datapath.ALUB.value = getNumber(registerBaseTwoValues[ALUB_INDEX],
+                                           2,getNumberBase(),16);
+
+  if(WITH_MEMORY)
+    top.memory.setSelectedAddress();
+}
+
+function clearALUReg()
+{
+  document.datapath.ALUA.value = "";
+  document.datapath.ALUB.value = "";
+
+  if(WITH_MEMORY)
+    top.memory.clearSelectedAddress()
+}
+
+function doALUOp()
+{
+
+  RESUME_HERE = "doALUOp();";
+
+  if (!HALT_CYCLE)
+  {
+    registerBaseTwoValues[ALUC_INDEX] = calculateALUResult();
+    setALUFlags();
+
+    if (WITH_MEMORY)
+      registerBaseTwoValues[MMBUS_INDEX] = top.memory.getValue();
+
+    blinkIt(NUM_BLINKS,
+            'setALUCReg(); setALUFlags();',
+            'clearALUCReg(); clearALUFlags();',
+            'loadALURegEnd();',
+            BLINK_TIME);
+  }
+}
+
+function calculateALUResult()
+{
+  var aluOp, aluResultU, aluResultS, AU, AS, BU, BS;
+
+  AS = getNumber(registerBaseTwoValues[ALUA_INDEX],2,-10,16);
+  BS = getNumber(registerBaseTwoValues[ALUB_INDEX],2,-10,16);
+  AU = getNumber(registerBaseTwoValues[ALUA_INDEX],2,10,16);
+  BU = getNumber(registerBaseTwoValues[ALUB_INDEX],2,10,16);
+
+  aluOp = getKnobSetting("ALU");
+
+  if (aluOp == 0)
+  {
+    aluResultU = AU + BU;
+    aluResultS = AS + BS;
+  }
+  else if (aluOp == 1)
+  {
+    aluResultS = AS | BS;
+    aluResultU = 0;
+  }
+  else if (aluOp == 2)
+  {
+    aluResultU = 0;
+    aluResultS = AS & BS;
+  }
+  else if (aluOp == 3)
+  {
+    aluResultU = AU - BU;
+    aluResultS = AS - BS;
+  }
+  
+  ALU_UNSIGNED_OVERFLOW = ((aluResultU > 65535) || (aluResultU < 0));
+  ALU_SIGNED_OVERFLOW = ((aluResultS > 32767) || (aluResultS < -32768));
+  ALU_ZERO = (aluResultS == 0);
+  ALU_NEGATIVE = (getNumber(aluResultS,-10,2,16).charAt(0) == '1');
+
+  return(getNumber(aluResultS,-10,2,16));
+}
+
+function setALUFlags()
+{
+  document.datapath.zero.checked = ALU_ZERO;
+  document.datapath.negative.checked = ALU_NEGATIVE;
+  document.datapath.uoverflow.checked = ALU_UNSIGNED_OVERFLOW;
+  document.datapath.soverflow.checked = ALU_SIGNED_OVERFLOW;
+}
+
+function clearALUFlags()
+{
+  document.datapath.zero.checked = false;
+  document.datapath.negative.checked = false;
+  document.datapath.soverflow.checked = false;
+  document.datapath.uoverflow.checked = false;
+}
+
+function setALUCReg(aluResult)
+{
+  document.datapath.ALUC.value = getNumber(registerBaseTwoValues[ALUC_INDEX],
+                                           2,getNumberBase(),16);
+
+  if (WITH_MEMORY)
+    document.datapath.MMBus.value = getNumber(registerBaseTwoValues[MMBUS_INDEX],
+                                              2,getNumberBase(),16);
+}
+
+function clearALUCReg()
+{
+  document.datapath.ALUC.value = "";
+
+  if (WITH_MEMORY)
+    document.datapath.MMBus.value = "";
+}
+
+function loadALURegEnd()
+{
+  loadCBusReg();
+}
+
+function loadCBusReg()
+{
+  RESUME_HERE = "loadCBusReg();";
+
+  if (!HALT_CYCLE)
+    blinkIt(NUM_BLINKS,
+            'setBendBlue()',
+            'setBendRed()',
+            'loadCBusRegTail()',
+            BLINK_TIME);
+}
+
+function setBendBlue()
+{
+  if(!WITH_MEMORY)
+    document.bend.src = "bendBlue.gif";
+  else
+  {
+    if (document.fromMemory.src.indexOf("Closed") != -1)
+      document.fromMemory.src = "upArrowClosedBlue.gif";
+  
+    if (document.bend.src.indexOf("Closed") != -1)
+      document.bend.src = "bendClosedBlue.gif";
+  }
+}
+
+function setBendRed()
+{
+  if(!WITH_MEMORY)
+    document.bend.src="bendRed.gif";
+  else
+  {
+    if (document.fromMemory.src.indexOf("Closed") != -1)
+      document.fromMemory.src = "upArrowClosedRed.gif";
+
+    if (document.bend.src.indexOf("Closed") != -1)
+      document.bend.src = "bendClosedRed.gif";
+  }
+}
+
+function loadCBusRegTail()
+{
+  RESUME_HERE = "loadCBusRegTail();";
+
+  if (!WITH_MEMORY)
+    registerBaseTwoValues[CBUS_INDEX] = registerBaseTwoValues[ALUC_INDEX];
+  else
+  {
+    if ((document.fromMemory.src.indexOf("Closed") != -1) && (document.bend.src.indexOf("Closed") != -1))
+      registerBaseTwoValues[CBUS_INDEX] = getNumber(
+        getNumber(registerBaseTwoValues[MMBUS_INDEX],2,10,16) |
+        getNumber(registerBaseTwoValues[ALUC_INDEX],2,10,16),10,2,16);
+
+    else if (document.fromMemory.src.indexOf("Closed") != -1)
+      registerBaseTwoValues[CBUS_INDEX] = registerBaseTwoValues[MMBUS_INDEX];
+
+    else if (document.bend.src.indexOf("Closed") != -1)
+      registerBaseTwoValues[CBUS_INDEX] = registerBaseTwoValues[ALUC_INDEX];
+  }
+
+  if (!HALT_CYCLE)
+    blinkIt(NUM_BLINKS,
+            'setCBusReg()',
+            'clearCBusReg()',
+            'loadCBusRegEnd()',
+            BLINK_TIME);
+}
+
+function setCBusReg()
+{
+  document.datapath.CBus.value = getNumber(registerBaseTwoValues[CBUS_INDEX],
+                                           2,getNumberBase(),16);
+}
+
+function clearCBusReg()
+{
+  document.datapath.CBus.value = "";
+}
+
+function loadCBusRegEnd()
+{
+  loadRegisters();
+}
+
+function loadRegisters()
+{  
+  RESUME_HERE = "loadRegisters();";
+
+  if (!HALT_CYCLE)
+    blinkIt(NUM_BLINKS,
+            'setCArrowBlue()',
+            'setCArrowRed()',
+            'loadRegistersTail()',
+            BLINK_TIME);
+}
+
+function setCArrowBlue()
+{
+  if (WITH_MEMORY && document.toMemory.src.indexOf("Closed") != -1)
+    document.toMemory.src = "downArrowClosedBlue.gif";
+
+  if (WITH_MEMORY) {
+    if (document.CArrow.src.indexOf("Closed") != -1)
+      document.CArrow.src = "upArrowClosedBlue.gif";
+  }
+  else {
+    document.CArrow.src = "upArrowBlue.gif";
+  }
+}
+
+function setCArrowRed()
+{
+  if (WITH_MEMORY && document.toMemory.src.indexOf("Closed") != -1)
+    document.toMemory.src = "downArrowClosedRed.gif";
+
+  if (WITH_MEMORY) {
+    if (document.CArrow.src.indexOf("Closed") != -1)
+      document.CArrow.src = "upArrowClosedRed.gif";
+  }
+  else {
+    document.CArrow.src = "upArrowRed.gif";
+  }
+}
+
+function loadRegistersTail()
+{
+  var cRegIndex;
+
+  RESUME_HERE = "loadRegistersTail();";
+
+  if (document.CArrow.src.indexOf("Closed") != -1 || !WITH_MEMORY)
+  {
+    cRegIndex = getKnobSetting("CAddr");
+    registerBaseTwoValues[cRegIndex] = registerBaseTwoValues[CBUS_INDEX];
+  }
+
+  if (WITH_MEMORY && document.toMemory.src.indexOf("Closed") != -1)
+    registerBaseTwoValues[MMBUS_INDEX] = registerBaseTwoValues[CBUS_INDEX];
+
+  if (!HALT_CYCLE)
+    blinkIt(NUM_BLINKS,
+            'setRegister()',
+            'clearRegister()',
+            'loadRegistersEnd()',
+            BLINK_TIME);
+}
+
+function setRegister()
+{
+  var cRegIndex;
+
+  if (WITH_MEMORY && document.toMemory.src.indexOf("Closed") != -1)
+    setMMBus();
+
+  if (document.CArrow.src.indexOf("Closed") != -1 || !WITH_MEMORY) 
+  {
+    cRegIndex = getKnobSetting("CAddr");
+    document.datapath["R" + cRegIndex].value = getNumber(registerBaseTwoValues[cRegIndex],
+                                                         2,getNumberBase(),16);
+  }
+}
+
+function clearRegister()
+{
+  var cRegIndex;
+
+  if (WITH_MEMORY && document.toMemory.src.indexOf("Closed") != -1)
+    clearMMBus();
+
+  if (document.CArrow.src.indexOf("Closed") != -1 || !WITH_MEMORY)
+  {
+    cRegIndex = getKnobSetting("CAddr");
+    document.datapath["R" + cRegIndex].value = "";
+  }
+}
+
+function loadRegistersEnd()
+{
+  if (WITH_MEMORY && document.toMemory.src.indexOf("Closed") != -1)
+    loadMainMemory();
+  else
+    loadMainMemoryEnd();
+}
+
+function loadMainMemory()
+{
+  RESUME_HERE = "loadMainMemory();";
+
+  if (!HALT_CYCLE)
+    blinkIt(NUM_BLINKS * 4,
+            'setMMBus()',
+            'clearMMBus()',
+            'loadMainMemoryTail()',
+            BLINK_TIME);
+}
+
+function setMMBus()
+{
+  document.datapath.MMBus.value = getNumber(registerBaseTwoValues[MMBUS_INDEX],
+                                            2, getNumberBase(),16);
+}
+
+function clearMMBus()
+{
+  document.datapath.MMBus.value = "";
+}
+
+function loadMainMemoryTail()
+{
+
+  RESUME_HERE = "loadMainMemoryTail();";
+
+  top.memory.setValue(registerBaseTwoValues[MMBUS_INDEX]);
+
+  if (!HALT_CYCLE)
+    blinkIt(NUM_BLINKS,
+            'setMMValue()',
+            'clearMMValue()',
+            'loadMainMemoryEnd()',
+            BLINK_TIME);
+}
+
+function setMMValue()
+{
+  top.memory.setSelectedAddress();
+}
+
+function clearMMValue()
+{
+  top.memory.clearSelectedAddress();
+}
+
+function loadMainMemoryEnd()
+{
+  RESUME_HERE = "loadMainMemoryEnd();";
+
+  if (!HALT_CYCLE)
+  {
+    if (WITH_CONTROL)
+    {
+      startInstructionCycle();
+    }
+    else if (WITH_MICROPROG)
+    {
+      MICRO_INST++;
+      if (MICRO_INST < 5)
+        setControls();
+      else
+        stopCycle();
+    }
+    else
+      stopCycle();
+  }
+}
+
+function runLightClicked()
+{
+  if (document.runLight.src.indexOf("Red") != -1)
+  {
+    executeCycle();
+  }
+  else 
+  { 
+    stopCycle();
+  }
+}
+
+function executeCycle()
+{ 
+  var i;
+   
+  if (document.datapath.runButton.value == "Executar") {
+    document.datapath.runButton.value = "Parar";
+    document.datapath.runButton.style = style="background-color: red;";
+
+    if (CHANGE_ENABLED)
+    {  
+      CHANGE_ENABLED = false;
+      HALT_CYCLE = false;
+      MICRO_INST = 0;
+
+      if (WITH_CONTROL) {
+        RESUME_HERE = "startInstructionCycle();";
+        startInstructionCycle();
+      }
+      else if (WITH_MICROPROG) {
+        RESUME_HERE = "setControls();";
+        setControls(); 
+      }
+      else {
+        RESUME_HERE = "loadABBusReg();";
+        loadABBusReg();
+      }
+    }
+  }
+  else {
+    document.datapath.runButton.value = "Executar";
+    document.datapath.pauseButton.value = "Pausar";
+    RESUME_HERE = null;
+    stopCycle();
+  }
+}
+
+function pauseCycle() {
+
+   if (document.datapath.runButton.value == "Parar") {
+     if (document.datapath.pauseButton.value == "Pausar") {
+       HALT_CYCLE = true;
+       document.datapath.pauseButton.value = "Retomar";
+     }
+     else {
+       document.datapath.pauseButton.value = "Pausar";
+       if (RESUME_HERE != null) {
+         HALT_CYCLE = false;
+         eval(RESUME_HERE);
+       }
+     }
+   }
+}
+
+function stopCycle()
+{
+  HALT_CYCLE= true;
+  CHANGE_ENABLED = true;
+  RESUME_HERE = null;
+  document.datapath.runButton.value = "Executar";
+  document.datapath.runButton.style = style="background-color: green;";
+}
+
+function getNumberBase()
+{
+  return (document.datapath.numberBase[
+            document.datapath.numberBase.selectedIndex].value);
+}
+
+function getBaseIndex(theBase)
+{
+  if (theBase == -10)
+    return 0;
+  else if (theBase == 10)
+    return 1;
+  else if (theBase == 2)
+    return 2;
+  else 
+    return 0;
+}
+
+function changeBase()
+{
+  var newNB;
+
+  if (CHANGE_ENABLED)
+  {
+    newNB = getNumberBase();
+
+    if (PREVIOUS_NUMBERBASE != newNB)
+    {
+      if (WITH_MEMORY)
+        top.memory.location.reload();
+
+      if (WITH_CONTROL)
+        top.control.location.reload();
+
+      updateAllRegisters(newNB);       
+    }
+    
+    PREVIOUS_NUMBERBASE = newNB;
+  }
+  else
+  {
+    document.datapath.numberBase[getBaseIndex(PREVIOUS_NUMBERBASE)].selected = true;
+  }
+}
+
+function registerChange(theReg)
+{
+  registerBaseTwoValues[theReg] = getNumber(document.datapath["R" + theReg].value,
+                                            getNumberBase(),2,16);
+}
+
+function changeSpeed()
+{
+  NUM_BLINKS = document.datapath.speed[
+            document.datapath.speed.selectedIndex].value;
+}
+
+</script>
+</head>
+
+<body onload="initPage()">
+
+<form name=datapath>
+<center>
+<b style="font-size: x-large">Caminho de Dados</b>
+<hr style="background-color: grey; height: 10px; width:85%">
+
+<table cellpadding=0 cellspacing=0>
+<tr><td colspan=4>
+<table width=100% bgcolor=white border=5 cellpadding=1 cellspacing=1>
+
+<tr>
+<td colspan=4>
+<center><font color=black style="font-size: larger;"><b>Banco de Registro</b></font></center>
+</td>
+</tr>
+
+<tr>
+
+<td width=24% align=center valign=center>
+
+<font color=black><b>Endereço do Barramento C</b></font><br><br>
+<a href="javascript:turnKnob('sreg', 'CAddr',1);">
+<img border=0 name=CAddr src="sregDial0.gif"></a>
+
+</td>
+
+<td width=28% bgcolor=grey align=center>
+<table border=0 cellspacing=0 cellpadding=0>
+
+<tr><td>
+<font color=white>R0:</font><input type=text name=R0 size=16 maxlength=16 tabindex=1
+               onfocus='if(!CHANGE_ENABLED) blur();'
+               onchange='registerChange(0);'>
+</td></tr>
+<tr><td>
+<font color=white>R1:</font><input type=text name=R1 size=16 maxlength=16 tabindex=2
+	       onfocus='if(!CHANGE_ENABLED) blur();'
+               onchange='registerChange(1);'>
+</td></tr>
+<tr><td><font color=white>R2:</font><input type=text name=R2 size=16 maxlength=16 tabindex=3
+               onfocus='if(!CHANGE_ENABLED) blur();'
+               onchange='registerChange(2);'>
+</td></tr>
+<tr><td><font color=white>R3:</font><input type=text name=R3 size=16 maxlength=16 tabindex=4
+               onfocus='if(!CHANGE_ENABLED) blur();'
+               onchange='registerChange(3);'>
+</td></tr>
+</table>
+</td>
+
+<td width=24% align=center valign=center>
+
+<font color=black><b>Endereço do Barramento A</b></font><br><br>
+<a href="javascript:turnKnob('sreg', 'AAddr',1)">
+<img border=0 name=AAddr src="sregDial0.gif"></a>
+
+</td>
+
+<td width=24% align=center valign=center>
+
+<font color=black><b>Endereço do Barramento B</b></font><br><br>
+<a href="javascript:turnKnob('sreg', 'BAddr',1);">
+<img border=0 name=BAddr src="sregDial0.gif"></a>
+
+</td>
+</tr>
+</table>
+</td></tr>
+
+<tr>
+<td rowspan=2 width=24% align=center valign=center>
+<script>
+  if (WITH_MEMORY)
+    document.write(
+      '<a href="javascript:toggleSwitch(\'CArrow\');">' +
+                '<img border=0 name=CArrow src="upArrowClosedBlue.gif"></a>');
+  else
+    document.write(
+      '<img border=0 name=CArrow src="upArrowBlue.gif">');
+</script>
+
+</td>
+
+<td rowspan=2 align=left valign=top>
+<table border=0>
+<tr>
+<td align=left>
+<input type=button name=runButton style="background-color: green;" value="Executar" onClick="executeCycle()">
+</td>
+<td align=left>
+<input type=button name=pauseButton style="background-color: yellow;" value="Pausar" onClick="pauseCycle()">
+</td></tr>
+<td align=right>
+<b>Animação<br>Velocidade: </b>
+</td>
+<td align=left>
+<select name=speed
+          onchange='changeSpeed()'>
+    <option value=41 style="font-size: large;">Mais Devagar
+    <option value=21 style="font-size: large;">Devagar
+    <option value=13 selected=true style="font-size: large;">Médio
+    <option value=5 style="font-size: large;">Rápido
+    <option value=1 style="font-size: large;">Mais Rápido
+  </select>
+</td></tr>
+<td align=right>
+<b>Número<br>Base:</b>
+</td>
+<td align=left>
+<select name=numberBase
+          onchange='changeBase()'>
+    <option value=-10 style="font-size: large;">+- 10
+    <option value=10 style="font-size: large;">10
+    <option value=2 style="font-size: large;">2
+  </select>
+</td>
+</tr>
+</table>
+
+</td>
+
+<td width=24% align=center valign=center>
+<img name=AArrow1 src="shortDownArrowBlue.gif">
+</td>
+
+<td width=24% align=center valign=center>
+<img name=BArrow1 src="shortDownArrowBlue.gif">
+</td>
+</tr>
+
+<tr>
+<td>
+<table bgcolor=white border=2 cellpadding=1 cellspacing=1>
+<tr><td align=center><font color=black><b>Barramento A</b></font></td></tr>
+<tr><td><input type=text name=ABus size=16 maxlength=16
+            onfocus='blur();'>
+</td></tr></table>
+</td>
+<td>
+<table bgcolor=white border=2 cellpadding=1 cellspacing=1>
+<tr><td align=center><font color=black><b>Barramento B</b></font></td></tr>
+<tr><td><input type=text name=BBus size=16 maxlength=16
+            onfocus='blur();'>
+</td></tr></table>
+</td>
+</tr>
+
+<tr>
+<td rowspan=2 colspan=2 align=left valign=top>
+
+<table width=100%>
+<tr><td colspan=3>
+<table width=75% bgcolor=white border=2 cellpadding=1 cellspacing=1>
+<tr><td align=center><font color=black><b>Barramento C</b></font></td></tr>
+<tr><td align=center><input type=text name=CBus size=16 maxlength=16
+            onfocus='blur();'>
+</td></tr></table>
+</td></tr>
+<tr>
+<td align=center valign=center>
+<script>
+  if (WITH_MEMORY)
+    document.write(
+        '<a href="javascript:toggleSwitch(\'toMemory\');">' +
+        '<img border=0 name=toMemory src="downArrowOpenBlue.gif"></a>');
+</script>
+</td>
+<td align=center valign=center>
+<script>
+  if (WITH_MEMORY)
+    document.write(
+        '<a href="javascript:toggleSwitch(\'fromMemory\');">' +
+        '<img border=0 name=fromMemory src="upArrowOpenBlue.gif"></a>');
+</script>
+</td>
+<td align=right valign=top>
+<script>
+  if (WITH_MEMORY)
+    document.write(
+      '<a href="javascript:toggleSwitch(\'bend\');">' +
+                '<img border=0 name=bend src="bendClosedBlue.gif"></a>');
+  else
+    document.write(
+      '<img name=bend src="bendBlue.gif">');
+</script>
+</td>
+</tr>
+<tr>
+<td colspan=3>
+<script>
+  if (WITH_MEMORY)
+  {
+    document.write(
+      '<table bgcolor=white border=2 cellpadding=1 cellspacing=1>' +
+      '<tr><td align=left valign=top>' +
+      '<input type=text name=MMBus size=16 maxlength=16 onfocus="blur();"></td></tr>' +
+      '<tr><td align=center><font color=blue><b>Main Memory Bus</b></font>' +
+      '</td></tr></table>');
+  }
+</script>
+</td>
+</tr>
+</table>
+
+</td>
+
+<td align=center valign=center>
+<img name=AArrow2 src="shortDownArrowBlue.gif">
+</td>
+
+<td align=center valign=center>
+<img name=BArrow2 src="shortDownArrowBlue.gif">
+</td>
+</tr>
+
+<tr>
+<td colspan=2 align=center valign=top>
+<table width=100% border=2 bgcolor=white cellpadding=1 cellspacing=1>
+
+<tr>
+<td align=center>A:<input type=text size=16 maxlength=16 name=ALUA
+              onfocus='blur();'></td>
+<td align=center>B:<input type=text size=16 maxlength=16 name=ALUB
+              onfocus='blur();'></td>
+</tr>
+
+<tr><td align=center colspan=2>
+  <font color=black><b>Unidade Aritmética e Lógica (UAL)</b></font>
+</td></tr>
+
+<tr>
+<td valign=center>
+C:<input type=text size=16 maxlength=16 name=ALUC
+      onfocus='blur();'><br>
+<input type=checkbox name=zero 
+         onclick="document.datapath.zero.checked = !document.datapath.zero.checked">
+&nbsp;&nbsp; Zero<br>
+<input type=checkbox name=negative
+         onclick="document.datapath.negative.checked = !document.datapath.negative.checked">
+&nbsp;&nbsp; Negativo<br>
+<input type=checkbox name=uoverflow
+         onclick="document.datapath.uoverflow.checked = !document.datapath.uoverflow.checked">
+&nbsp;&nbsp; Estouro não Assinado<br>
+<input type=checkbox name=soverflow
+         onclick="document.datapath.soverflow.checked = !document.datapath.soverflow.checked">
+&nbsp;&nbsp; Estouro Assinado
+</td>
+
+<td align=center valign=center>
+<font color=black><b>Operação UAL</b></font><br><br>
+<a href="javascript:turnKnob('salu','ALU',1);">
+<img border=0 name=ALU src="saluDial0.gif"></a>
+</td></tr>
+</table>
+</td>
+</tr>
+</table> 
+
+</form>
+
+</body>
+</html>
