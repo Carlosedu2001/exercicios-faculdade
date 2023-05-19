@@ -1,0 +1,318 @@
+</html>
+<head>
+<title>Memória</title>
+
+<script src="scripts-memoryjs.js"></script>
+
+<script>
+
+memoryBaseTwoValues = new Array(32);
+
+function saveValues()
+{
+  var i, theType;
+
+  top.memorySaved = true;
+
+  top.memoryValues = new Array(32);
+  top.memoryTypes = new Array(32);
+  top.memoryRWAddress = getRWAddress();
+
+  for(i=0; i<=31; i++)
+  {
+    top.memoryValues[i] = memoryBaseTwoValues[i];
+    theType = getDataType("MM" + i);   
+    top.memoryTypes[i] = getDataType("MM" + i)
+  }
+}
+
+function getValues()
+{
+  var i;
+ 
+  if (!top.DATAPATH_LOADED)
+    setTimeout('getValues()',100);
+  else
+  {
+    for(i=0; i<=31; i++)
+    {
+      if(top.memorySaved)
+      {
+        setValue(top.memoryValues[i],"MM" + i);
+        setDataType(top.memoryTypes[i],"MM" + i);
+      }
+      else
+      { 
+        setValue("0000000000000000","MM" + i);
+        setDataType(0,"MM" + i);
+      }
+    }
+ 
+    if (top.memorySaved != null)
+    {
+      setRWAddress(top.memoryRWAddress);
+      CURRENT_RW_ADDRESS = top.memoryRWAddress;
+    }
+    else
+    {
+      setRWAddress("MM0");
+      CURRENT_RW_ADDRESS = "MM0";
+    }
+  } 
+}
+
+function clearSelectedAddress(MMAddr)
+{
+  if (!MMAddr)
+    MMAddr = getRWAddress();
+
+  document.memory[MMAddr].value = "";
+}
+
+function setSelectedAddress(MMAddr)
+{
+  if (!MMAddr)
+    MMAddr = getRWAddress();
+
+  setValue(getValue(MMAddr),MMAddr);
+}
+
+function getDataTypeIndex(theType)
+{
+  if (theType == 0)
+    return 0;
+  else if (theType == -10)
+    return 1;
+  else if (theType == 10)
+    return 2;
+  else if (theType == 2)
+    return 3;
+  else if (theType == -1)
+    return 4;
+  else 
+    return 0;
+}
+
+function changeMemoryType(MMAddr)
+{
+  setDataType(getDataType(MMAddr),MMAddr);
+}
+
+function trimString(theStr)
+{
+  var i, ignore, atEnd, newStr;
+
+  newStr = "";
+  ignore = true;
+  atEnd = true;
+
+  for (i=theStr.length-1; i >= 1; i--)
+  { 
+    if (theStr.charAt(i) != ' ')
+    {
+      ignore = false;
+      atEnd = false;
+    }
+    else
+      ignore = (theStr.charAt(i-1) == ' ' || atEnd);
+
+    if (!ignore)
+       newStr = theStr.charAt(i) + newStr;
+  }
+ 
+  if (theStr.charAt(0) != ' ')
+    newStr = theStr.charAt(0) + newStr;
+
+  return newStr;
+}
+
+function changeMemoryValue(MMAddr)
+{
+  var theType, addr, theVal;
+
+  theVal = trimString(document.memory[MMAddr].value.toUpperCase());
+  document.memory[MMAddr].value = theVal;
+  
+  theType = getDataType(MMAddr);
+  if (theType == 0)
+    theType = top.datapath.getNumberBase();
+
+  addr = MMAddr.substring(2,MMAddr.length);
+  memoryBaseTwoValues[addr] = getNumber(theVal,theType,2,16);
+
+  if (top.datapath.WITH_CONTROL)
+  {
+     if ((theVal.charAt(0) < '0' || theVal.charAt(0) > '9') && theVal.charAt(0) != '-') { 
+       document.memory["DType" + MMAddr].selectedIndex = getDataTypeIndex(-1);
+       memoryBaseTwoValues[addr] = getOpcode(theVal);
+     }
+
+     if (validInstruction(theVal) && theType != -1)
+     {
+       document.memory["DType" + MMAddr].selectedIndex = getDataTypeIndex(-1);
+       memoryBaseTwoValues[addr] = getOpcode(theVal);
+     }
+     else if (!validInstruction(theVal) && theType == -1)
+     { 
+       document.memory[MMAddr].value = "ERR: " + theVal;
+       memoryBaseTwoValues[addr] = "1111111111111111";
+     }
+  }
+}
+
+function memoryBlur(MMAddr)
+{
+  if (document.memory[MMAddr].value.substring(0,4) != "ERR:")
+    changeMemoryValue(MMAddr);
+}
+
+function memoryFocus(MMAddr)
+{
+  var theVal;
+  theVal = document.memory[MMAddr].value;
+
+  if (theVal.substring(0,4) == "ERR:")
+    document.memory[MMAddr].value = theVal.substring(5,theVal.length);
+}
+
+function changeRWAddress(MMAddr)
+{
+  if (!top.datapath.CHANGE_ENABLED)
+    setRWAddress(CURRENT_RW_ADDRESS);
+  else
+    CURRENT_RW_ADDRESS = MMAddr;
+}
+
+function getDataType(MMAddr)
+{
+  var theDType, theIndex;
+
+  if (MMAddr == null)
+    MMAddr = getRWAddress();
+
+  theIndex = document.memory["DType" + MMAddr].selectedIndex;
+  theDType = document.memory.DTypeMM0[theIndex].value;
+
+  return theDType;
+}
+
+function setDataType(theType,MMAddr)
+{
+  var addr;
+
+  if (MMAddr == null)
+    MMAddr = getRWAddress();
+  
+  document.memory["DType" + MMAddr].selectedIndex = getDataTypeIndex(theType);
+
+  addr = MMAddr.substring(2,MMAddr.length);
+
+  if (theType != 0)
+    document.memory[MMAddr].value = getNumber(memoryBaseTwoValues[addr],
+                                              2, theType,16);
+  else
+    document.memory[MMAddr].value = getNumber(memoryBaseTwoValues[addr],
+                                              2, top.datapath.getNumberBase(),16);
+}
+
+function getValue(MMAddr)
+{
+  var addr;
+
+  if (MMAddr == null)
+    MMAddr = getRWAddress();
+
+  addr = MMAddr.substring(2,MMAddr.length);
+
+  return memoryBaseTwoValues[addr];
+}
+
+function setValue(baseTwoVal, MMAddr)
+{
+  var theType, addr;
+
+  if (MMAddr == null)
+    MMAddr = getRWAddress();
+
+  addr = MMAddr.substring(2,MMAddr.length);
+  memoryBaseTwoValues[addr] = baseTwoVal;
+
+  theType = getDataType(MMAddr);
+
+  if (theType == 0)
+    theType = top.datapath.getNumberBase();
+
+  document.memory[MMAddr].value = getNumber(baseTwoVal,2,theType,16);
+}
+
+function getRWAddress()
+{
+  return CURRENT_RW_ADDRESS;
+}
+
+function setRWAddress(MMAddr)
+{
+  var addr;
+
+  addr = MMAddr.substring(2,MMAddr.length);
+  document.memory.MMSelect[addr].checked = true;
+  CURRENT_RW_ADDRESS = MMAddr;
+}
+
+function getNumberBase()
+{
+  if (top.DATAPATH_LOADED)
+    return top.datapath.getNumberBase();
+  else
+    return -10;
+}
+</script>
+
+</head>
+<body onunload='saveValues()' onload='getValues()'>
+<form name=memory>
+
+<center>
+<b style="font-size: x-large">Memória Principal</b>
+<hr style="background-color: grey; height: 10px; width:85%">
+
+<table width=100% border=0 cellspacing=0 cellpadding=0>
+
+<tr><td align=left style="font-size: larger;">Ver como:</td>
+    <td align=left style="font-size: larger;"></td>
+    <td align=left style="font-size: larger;">Valor:</td>
+    <td align=left style="font-size: larger;">Ordem: Lida/Escrita</td>
+</tr>
+<script>
+for (i=0; i<=31; i++)
+{
+  document.write('<tr><td><select name=DTypeMM' + i + 
+                 ' onchange="changeMemoryType(\'MM' + i + '\');">' +
+                 '<option value=0 style="font-size: large;">Auto' +
+                 '<option value=-10 style="font-size: large;">+-10' +
+                 '<option value=10 style="font-size: large;">10' +
+                 '<option value=2 style="font-size: large;">2');
+
+  if (top.control != null)
+    document.write('<option value=-1>Inst');
+
+  document.write('</select></td>');
+
+  document.write('<td align=right>' + 
+                 getNumber(i,10,Math.abs(getNumberBase()),5) + ':</td>');
+  document.write('<td><input type=text name=MM'+ i + 
+                 ' size=16 maxlength=16 tabindex=' + (i+1) + 
+                 ' onfocus="if(!top.datapath.CHANGE_ENABLED) blur(); else memoryFocus(\'MM' + i + '\');"' +
+                 ' onchange="changeMemoryValue(\'MM' + i + '\');"' +
+                 ' onblur="memoryBlur(\'MM' + i + '\');"></td>' + 
+                 '<td><input type=radio name=MMSelect value=MM' + i +
+                 ' onClick="changeRWAddress(\'MM' + i + '\');"></td></tr>');
+}
+</script>
+
+</td></tr>
+</table>
+</center>
+</form>
+</body>
+</html>
